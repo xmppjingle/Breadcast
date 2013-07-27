@@ -1,0 +1,14 @@
+*~
+*.iml
+*.iws
+*.ipr
+*.java.*
+*.orig
+*.beam
+ebin/
+deps/
+target/
+.idea/
+.project
+.settings/
+.classpath

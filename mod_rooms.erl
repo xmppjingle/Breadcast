@@ -6,7 +6,7 @@
 -define(ERROR_MSG(M, P), lager:error(M, P)).
 
 %% API
--export([create/2, info/1]).
+-export([create/2, info/1, join/2]).
 
 %% gen_server callbacks
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -16,9 +16,14 @@
 	id = now() :: erlang:timestamp(),
 	owner :: string(),
 	joined = [] :: list(string()),
-	invited = [] :: list(string()),
 	title :: string(),
-	created = now() :: erlang:timestamp()
+	timestamp = now() :: erlang:timestamp()
+}).
+
+-record(user, {
+	jid :: string(),
+	mute = now() :: erlang:timestamp(),
+	timestamp = now() :: erlang:timestamp()
 }).
 
 -record(state, {rooms}).
@@ -53,7 +58,40 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
  	{ok, State}.
 
-%% Tables
+%% Module Functions
+
+create(#user{}=Owner, Title) ->
+	Room = #room{owner=Owner, title=Title},
+	write_room(Room),
+	broadcast_event(Room, {created, Owner}).
+
+join(#room{joined=Joined}=R, #user{}=User) ->
+	Room=R#room{joined=[User|Joined]},
+	write_room(Room),
+	broadcast_event(R, {joined, User}).
+
+info(Id) ->
+	read_room(Id).
+
+%$ Event Functions
+
+broadcast_event(#room{joined=Joined}, Event) ->
+	broadcast_event(Joined, Event);
+broadcast_event([], _Event) ->
+	ok;
+broadcast_event([#user{mute=Mute}=User|J], Event)->
+	MuteDelta = timer:now_diff(now(), Mute),
+	send_event(User, MuteDelta, Event),
+	broadcast_event(J, Event).
+
+send_event(#user{jid=_Jid}, MuteDelta, _Event) when MuteDelta > 0  ->
+	%% Dispatch
+	ok;
+send_event(_,_,_) ->
+	%% Muted User
+	muted.
+
+%% Persistance Functions
 
 prepare_tables() ->
 	mnesia:start(),
@@ -62,16 +100,7 @@ prepare_tables() ->
              {type, set},
              {attributes, record_info(fields, room)}]).
 
-%% Module Functions
-
-create(Owner, Title) ->
-	Room = #room{owner=Owner, title=Title},
-	mnesia:dirty_write(Room).
-
-invite(#room{joined=Joined, invited=Invited}=R, User) ->
-	R#room{invited=[User|Invited]}.
-
-info(Id) ->
+read_room(Id) ->
 	case mnesia:dirty_read(room, Id) of
 		[] ->
 			undefined;
@@ -80,3 +109,8 @@ info(Id) ->
 		_ ->
 			error
 	end.
+
+write_room(#room{}=R) ->
+	mnesia:dirty_write(R);
+write_room(_) ->
+	error.

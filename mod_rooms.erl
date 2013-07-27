@@ -63,12 +63,15 @@ code_change(_OldVsn, State, _Extra) ->
 create(#user{}=Owner, Title) ->
 	Room = #room{owner=Owner, title=Title},
 	write_room(Room),
-	broadcast_event(Room, {created, Owner}).
+	broadcast_event(Room, {created, Room, Owner}).
 
 join(#room{joined=Joined}=R, #user{}=User) ->
 	Room=R#room{joined=[User|Joined]},
 	write_room(Room),
-	broadcast_event(R, {joined, User}).
+	broadcast_event(R, {joined, Room, User}).
+
+message(#room{}=R, #user{}=User, Body) ->
+	broadcast_event(R, {message, R, User, Body}).
 
 info(Id) ->
 	read_room(Id).
@@ -89,7 +92,7 @@ send_event(#user{jid=_Jid}, MuteDelta, _Event) when MuteDelta > 0  ->
 	ok;
 send_event(_,_,_) ->
 	%% Muted User
-	muted.
+	error.
 
 %% Persistance Functions
 

@@ -6,7 +6,7 @@
 -define(ERROR_MSG(M, P), lager:error(M, P)).
 
 %% API
--export([create/2, info/1, join/2]).
+-export([create/2, info/1, join/2, message/3, leave/2]).
 
 %% gen_server callbacks
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -73,6 +73,18 @@ join(#room{joined=Joined}=R, #user{}=User) ->
 message(#room{}=R, #user{}=User, Body) ->
 	broadcast_event(R, {message, R, User, Body}).
 
+leave(#room{joined=Joined}=Room, #user{jid=JID}=User) ->
+	lists:filter(fun(X) ->
+					case X of
+						JID ->
+							write_room(Room),
+							broadcast_event(Room, {left, Room, User}),
+							false;
+						_ ->
+							true
+					end
+				end, Joined).
+
 info(Id) ->
 	read_room(Id).
 
@@ -114,6 +126,7 @@ read_room(Id) ->
 	end.
 
 write_room(#room{}=R) ->
-	mnesia:dirty_write(R);
+	mnesia:dirty_write(R),
+	R;
 write_room(_) ->
 	error.
